@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneIntraNote</title>
+    <!--
+      PWA manifest placeholder: the href is dynamically updated by App.tsx when a site
+      with a manifest.json is loaded. Each site gets a unique manifest path so it can
+      install as its own PWA. The SW serves the rewritten manifest at that path.
+    -->
+    <link rel="manifest" id="pwa-manifest">
+  </head>
+  <!--
+    Body styles: margin/padding 0 and overflow hidden because when a site is loaded,
+    it renders fullscreen in an iframe that covers the entire viewport.
+    The #root div is sized to 100vw/100vh for the same reason.
+  -->
+  <body style="margin:0;padding:0">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
