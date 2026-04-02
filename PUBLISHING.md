@@ -70,17 +70,69 @@ node publish.js ./dist "Team Dashboard" --site "contoso.sharepoint.com,abc123,de
 node publish.js ./dist "My App" --site "contoso.sharepoint.com,abc123,def456" "Project Notebook"
 ```
 
-### What happens when you publish
+## Publishing manually (no CLI required)
 
-1. The directory is zipped
-2. You authenticate via browser (first time) or cached token (subsequent runs)
-3. The script finds the target notebook and creates a "Sites" section if needed
-4. The zip is uploaded as a file attachment on a new OneNote page
-5. You get a shareable URL
+If you don't want to install Node.js or use the command line, you can publish directly through the OneNote app. This works for any notebook — personal or SharePoint site notebooks.
 
-### Updating a site
+### Step 1: Zip your site
 
-Just run the same publish command again. The old version is automatically replaced.
+Your static site must have an `index.html` at the root. Zip the entire site directory into a single file called `site.zip`.
+
+**macOS:**
+1. Open Finder and navigate to your site's build output folder (e.g. `dist/` or `public/`)
+2. Select **all files inside the folder** (not the folder itself) — Cmd+A
+3. Right-click → "Compress Items"
+4. Rename the resulting `Archive.zip` to `site.zip`
+
+**Windows:**
+1. Open File Explorer and navigate to your site's build output folder
+2. Select all files inside the folder — Ctrl+A
+3. Right-click → "Compress to ZIP file"
+4. Rename the file to `site.zip`
+
+**Important:** The zip must contain `index.html` at the top level, not inside a subfolder. If you open the zip, you should see `index.html` immediately — not a folder containing it.
+
+### Step 2: Create the "Sites" section in OneNote
+
+1. Open the target notebook in OneNote (desktop app or OneNote for the web)
+2. Create a new **section** called exactly `Sites` (case-sensitive)
+
+### Step 3: Create a page and attach the zip
+
+1. Inside the "Sites" section, create a new **page**
+2. Set the page **title** to whatever you want the site to be called (e.g. "Team Dashboard")
+3. Attach `site.zip` to the page:
+   - **OneNote desktop:** Go to Insert → File Attachment → select `site.zip` → choose "Attach File"
+   - **OneNote for the web:** Drag and drop `site.zip` onto the page, or use Insert → File
+
+That's it. The site is now published.
+
+### Step 4: Get the shareable link
+
+You need two pieces of information to construct the link:
+
+- **Notebook ID:** Open the notebook in OneNote for the web. The URL will contain the notebook ID — look for a segment like `1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` in the address bar.
+- **Site name:** The exact page title you used in Step 3.
+
+**For personal notebooks:**
+```
+https://j-chambers-f5.github.io/oneintranote/nb/<notebook-id>/<site-name>
+```
+
+**For SharePoint site notebooks:**
+```
+https://j-chambers-f5.github.io/oneintranote/s/<site-id>/nb/<notebook-id>/<site-name>
+```
+
+Replace spaces in the site name with `%20` (e.g. `Team%20Dashboard`).
+
+### Updating a manually published site
+
+1. Delete the existing page in the "Sites" section
+2. Create a new page with the same title
+3. Attach the updated `site.zip`
+
+The viewer caches the previous version, so returning visitors will see the old site instantly while the new version loads in the background. A page refresh will show the update.
 
 ## Sharing
 
