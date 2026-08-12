@@ -202,11 +202,17 @@ function Main() {
   const iframePathRef = useRef(SW_PREFIX);
   const routeRef = useRef(parseRoute());
 
-  /** Acquire an access token silently (from cache or via refresh). */
+  /** Acquire an access token silently (from cache or via refresh), with interactive popup fallback if consent is required. */
   async function getToken() {
     const account = accounts[0];
     if (!account) throw new Error("Not authenticated");
-    return (await instance.acquireTokenSilent({ scopes: graphScopes.onenote, account })).accessToken;
+    try {
+      return (await instance.acquireTokenSilent({ scopes: graphScopes.onenote, account })).accessToken;
+    } catch {
+      // Fall back to interactive popup when new scopes require user consent (e.g. AADSTS65001)
+      const res = await instance.acquireTokenPopup({ scopes: graphScopes.onenote, account });
+      return res.accessToken;
+    }
   }
 
   /** Fetch all notebooks from Graph API, following pagination links. */
