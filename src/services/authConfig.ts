@@ -54,5 +54,5 @@ export const msalConfig: Configuration = {
 // Notes.Read.All also covers /sites/{id}/onenote/* and /groups/{id}/onenote/*.
 // This is a delegated permission — users can consent to it themselves (no admin needed).
 export const graphScopes = {
-  onenote: ["Notes.Read.All"],
+  onenote: ["Notes.Read.All", "Sites.Read.All"],
 };

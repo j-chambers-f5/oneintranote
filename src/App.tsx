@@ -521,9 +521,55 @@ function Main() {
   }, [ready, currentNotebook]);
 
   /** Handle the "Go" button on the URL input — find a notebook matching the pasted URL. */
-  function handleGo() {
+  async function handleGo() {
     const url = urlInput.trim();
     if (!url) return;
+
+    setStatus("Resolving notebook from URL...");
+
+    // Check if the URL is a SharePoint site URL or contains sourcedoc parameter
+    const sourcedocMatch = url.match(/sourcedoc=\{?([a-f0-9-]+)\}?/i);
+    const spMatch = url.match(/https?:\/\/([^\/]+)\/(sites\/[^\/]+)/i);
+
+    if (spMatch || sourcedocMatch) {
+      const sitePath = spMatch ? `${spMatch[1]}:/${spMatch[2]}` : null;
+      const guid = sourcedocMatch ? sourcedocMatch[1].toLowerCase() : null;
+
+      try {
+        const token = await getToken();
+        let siteId: string | null = null;
+        if (sitePath) {
+          const siteRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${sitePath}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const siteData = await siteRes.json();
+          if (siteData.id) siteId = siteData.id;
+        }
+
+        if (siteId) {
+          // Query site notebooks on the SharePoint Team Site
+          const nbRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/onenote/notebooks`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const nbData = await nbRes.json();
+          const nbs = nbData.value || [];
+          const nb = guid ? nbs.find((n: { id: string }) => n.id.toLowerCase().includes(guid) || n.id.toLowerCase().includes(guid.replace(/-/g, ""))) || nbs[0] : nbs[0];
+
+          if (nb) {
+            // Extract page title from target parameter if present
+            const pageMatch = url.match(/target\([^|]+\|[^|]*?([^|/]+)\|/);
+            const pageTitle = pageMatch ? decodeURIComponent(pageMatch[1]) : "";
+
+            const targetUrl = nbUrl(nb.id, siteId, pageTitle ? `/${encodeURIComponent(pageTitle)}` : "");
+            window.location.href = targetUrl;
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("SharePoint site lookup error:", e);
+      }
+    }
+
     const nb = findNotebookByUrl(notebooks, url);
     if (nb) {
       window.location.href = appUrl(`/nb/${encodeURIComponent(nb.id)}`);

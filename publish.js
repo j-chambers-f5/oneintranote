@@ -38,7 +38,7 @@ let TENANT_ID = process.env.ONEINTRANOTE_TENANT_ID || "common";
 
 // Notes.ReadWrite.All is needed to create/update pages in site notebooks.
 // openid and profile are needed to extract the user's identity from the id_token.
-const SCOPES = "Notes.ReadWrite.All openid profile";
+const SCOPES = "Notes.ReadWrite.All Sites.ReadWrite.All Sites.Read.All openid profile";
 
 // Convention: all sites are stored in a section named "Sites" within the notebook.
 const SECTION_NAME = "Sites";
@@ -54,7 +54,7 @@ const VIEWER_URL = "https://j-chambers-f5.github.io/oneintranote";
 //   Business: https://...sharepoint.com/...?sourcedoc={GUID}&wd=target(Section.one|.../PageName|...)
 //   Personal: https://onedrive.live.com/...?sourcedoc={GUID}&wd=target(Section.one|/PageName|...)
 function parseOneNoteUrl(url) {
-  const result = { notebookGuid: null, pageName: null };
+  const result = { notebookGuid: null, pageName: null, sitePath: null };
 
   // Decode URL-encoded characters first
   const decoded = decodeURIComponent(url);
@@ -69,6 +69,12 @@ function parseOneNoteUrl(url) {
   const wd = decoded.match(/target\([^|]+\|[^|]*?([^|/]+)\|/);
   if (wd) {
     result.pageName = wd[1];
+  }
+
+  // Extract SharePoint site path if present
+  const spMatch = decoded.match(/https?:\/\/([^\/]+)\/(sites\/[^\/]+)/i);
+  if (spMatch) {
+    result.sitePath = `${spMatch[1]}:/${spMatch[2]}`;
   }
 
   return result;
@@ -167,13 +173,18 @@ async function browserAuth() {
 
     server.listen(REDIRECT_PORT, () => {
       console.log("Opening browser for authentication...");
+      console.log("\n  Auth URL (if browser doesn't open automatically):\n  " + authUrl + "\n");
       // Open the default browser to the authorization URL
       const open = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-      execSync(`${open} "${authUrl}"`);
+      try {
+        execSync(`${open} "${authUrl}"`);
+      } catch {
+        /* ignore */
+      }
     });
 
-    // Timeout after 2 minutes if the user doesn't complete sign-in
-    setTimeout(() => { server.close(); rejectAuth(new Error("Authentication timed out")); }, 120000);
+    // Timeout after 10 minutes if the user doesn't complete sign-in
+    setTimeout(() => { server.close(); rejectAuth(new Error("Authentication timed out")); }, 600000);
   });
 }
 
@@ -227,8 +238,34 @@ async function getAccessToken() {
  * Business notebook IDs look like "1-{guid-with-dashes}" and personal IDs look like
  * "0-{hex}!s{guid-no-dashes}", so we match both with and without dashes.
  */
-async function findNotebookByGuid(token, guid) {
+async function findNotebookByGuid(token, guid, sitePath = null) {
   const headers = { Authorization: `Bearer ${token}` };
+
+  // If a SharePoint site path was extracted from the URL, try querying that site's notebooks first
+  if (sitePath) {
+    try {
+      const siteRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${sitePath}`, { headers });
+      const siteData = await siteRes.json();
+      if (siteData.id) {
+        const siteNbsRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/onenote/notebooks?$select=displayName,id`, { headers });
+        const siteNbsData = await siteNbsRes.json();
+        for (const nb of siteNbsData.value || []) {
+          const nbIdLower = nb.id.toLowerCase();
+          const guidNoDashes = guid.replace(/-/g, "");
+          if (nbIdLower.includes(guid) || nbIdLower.includes(guidNoDashes)) {
+            return { nb, graphSiteId: siteData.id };
+          }
+        }
+        if (siteNbsData.value?.length) {
+          return { nb: siteNbsData.value[0], graphSiteId: siteData.id };
+        }
+      }
+    } catch (e) {
+      console.warn("Could not query SharePoint site directly:", e.message);
+    }
+  }
+
+  // Fallback to searching user's personal/business notebooks
   let url = "https://graph.microsoft.com/v1.0/me/onenote/notebooks?$select=displayName,id&$top=50";
   while (url) {
     const res = await fetch(url, { headers });
@@ -236,7 +273,7 @@ async function findNotebookByGuid(token, guid) {
     for (const nb of data.value || []) {
       const nbIdLower = nb.id.toLowerCase();
       const guidNoDashes = guid.replace(/-/g, "");
-      if (nbIdLower.includes(guid) || nbIdLower.includes(guidNoDashes)) return nb;
+      if (nbIdLower.includes(guid) || nbIdLower.includes(guidNoDashes)) return { nb, graphSiteId: null };
     }
     url = data["@odata.nextLink"] || null;
   }
@@ -447,13 +484,15 @@ Environment variables:
     console.log(`Extracted notebook GUID: ${parsed.notebookGuid}`);
     if (parsed.pageName) console.log(`Extracted page name: ${parsed.pageName}`);
 
-    // Find the notebook in the user's account by matching the GUID
-    const nb = await findNotebookByGuid(token, parsed.notebookGuid);
-    if (!nb) {
+    // Find the notebook by matching the GUID (and checking SharePoint site if sitePath present)
+    const result = await findNotebookByGuid(token, parsed.notebookGuid, parsed.sitePath);
+    if (!result || !result.nb) {
       console.error(`No notebook found matching GUID ${parsed.notebookGuid}. Make sure you're signed into the right account.`);
       process.exit(1);
     }
 
+    const nb = result.nb;
+    graphSiteId = result.graphSiteId;
     notebookId = nb.id;
     notebookName = nb.displayName;
     // Site name priority: CLI arg > page name from URL > default "Site"
