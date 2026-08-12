@@ -38,7 +38,7 @@ let TENANT_ID = process.env.ONEINTRANOTE_TENANT_ID || "common";
 
 // Notes.ReadWrite.All is needed to create/update pages in site notebooks.
 // openid and profile are needed to extract the user's identity from the id_token.
-const SCOPES = "Notes.ReadWrite.All Sites.ReadWrite.All Sites.Read.All openid profile";
+const SCOPES = "Notes.ReadWrite.All openid profile";
 
 // Convention: all sites are stored in a section named "Sites" within the notebook.
 const SECTION_NAME = "Sites";
